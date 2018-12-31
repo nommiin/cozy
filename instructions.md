@@ -18,50 +18,50 @@
     - Arguments: 0
     - Function: Copies the top value of the stack back into the stack
 
-* PUSH
+* PUSH (Push)
     - Arguments: 2 (type, value)
     - Function: Pushes the "value" to the stack
 
-* LOCL
+* LOCL (Local)
     - Arguments: 1 (name)
     - Function: Pops 1 value from the stack and assigns it to local variables as "name"
 
-* GLOB
+* GLOB (Global)
     - Arguments: 1 (name)
     - Function: Pops 1 value from the stack and assigns it to global variables as "name
 
-* CALL
+* CALL (Call)
     - Arguments: 2 (argcount, name)
     - Function: Pops "argcount" values from stack and passes them as arguments into "name" function
 
-* COMP
+* COMP (Compare)
     - Arguments: 1 (type)
     - Function: Pops 2 values from stack, compares them using "type", and pushes result to stack
 
-* JUMP
+* JUMP (Jump)
     - Arguments: 1 (count)
     - Function: Moves the interpreter position "count" values 
 
-* BTRU
+* BTRU (Branch If True)
     - Arguments: 1 (count)
     - Function: Pops 1 value from stack and moves the interpreter position "count" values if true
 
-* BFAL
+* BFAL (Branch If False)
     - Arguments: 1 (count)
     - Function: Pops 1 value from stack and moves the interpreter position "count" values if false
 
-* FUNC
+* FUNC (Function)
     - Arguments: 0-1 (name)
     - Function: If 1 argument is given, registers all incoming instructions as function "name", otherwise marks the end of the function
 
-* DUMP
+* DUMP (Dump)
     - Arguments: 0
     - Function: Clears the stack of all values
 
-* RTRN
+* RTRN (Return)
     - Arguments: 0
     - Function: Pops 1 value from stack and returns it from function call, ends current execution
 
-* EXIT
+* EXIT (Exit)
     - Arguments: 0
     - Function: Ends current execution

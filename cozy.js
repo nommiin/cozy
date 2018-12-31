@@ -708,6 +708,10 @@ mRuntime = {
                         return [mStack.pop()];
                     } else {mRuntime.Error("Unable to return value, stack is empty", mPosition);}
                 }
+
+                case "EXIT": {
+                    return;
+                }
             }
         }
         console.log("Locals: " + JSON.stringify(mLocals));
@@ -753,19 +757,10 @@ mDecompiler = {
 }
 
 var t = mCompiler.Compile(`
-    // Hello World
-    local a = 1 + 2;
-    /*
-        This is a multiline comment!
-    */
-
-
-    // Test
-    local b = local.a + 3;
-
-    // this should print 6
-    print(local.b);
-    
+    local a = 0;
+    if (local.a == 1) {
+        print("local.a is equal to 1");
+    }
 `);
 
 console.log(JSON.stringify(t))
@@ -775,6 +770,24 @@ mRuntime.Run(t);
 //mDecompiler.Decompile(t);
 
 /*
+
+[
+	"PUSH", ["number", 3],
+	"LOCL", "a",
+	"FUNC", "add",
+	"PUSH", ["local", "a"],
+	"PUSH", ["local", "b"],
+	"ADD",
+	"RTRN",
+	"FUNC",
+	"PUSH", ["local", "a"],
+	"PUSH", ["number", 3],
+	"ADD",
+	"LOCL", "b",
+	"PUSH", ["local", "b"],
+	"CALL", [1, "print"]
+]
+
 mRuntime.Run([
     "PUSH", ["number", 32],
     "PUSH", ["number", 32],
