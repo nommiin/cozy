@@ -1,11 +1,42 @@
 var a = [1, 2, 3];
-var b = [9, 8, 7];
+function b() {
+    console.log(a);
+}
+b();
+
+function add(a, b) {
+    return a + b;
+}
+
+var a = add(32, add(32, add(32, 0) + (64 / 2)));
+console.log(a);
+
+switch (0) {
+    case 0: {
+        break;
+    }
+
+    case 1: {
+        break;
+    }
+
+    default: {
+
+    }
+}
+
+/*
+Array.prototype.peek = function() {
+    return this[this.length - 1];
+}
+
+console.log(a.peek());
 
 console.log("Concat:", JSON.stringify(a.concat(b)));
 while (b.length > 0) {
     a.push(b.pop());
 }
-console.log("Pop:", JSON.stringify(a.concat(b)));
+console.log("Pop:", JSON.stringify(a.concat(b)));*/
 
 /*
 mEvaluator = {

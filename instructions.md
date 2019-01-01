@@ -51,8 +51,8 @@
     - Description: Moves the interpreter to "position" if false
 
 * FUNC (Function)
-    - Arguments: 0-1 (name)
-    - Description: If 1 argument is given, registers all incoming instructions as function "name", otherwise marks the end of the function
+    - Arguments: 1 (name)
+    - Description: Registers all incoming instructions as function "name", otherwise marks the end of the function if "name" is 0
 
 * DUMP (Dump)
     - Arguments: 0

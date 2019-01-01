@@ -1,10 +1,14 @@
+Array.prototype.peek = function() {
+    return this[this.length - 1];
+}
+
 /**
     cozy - another compiler(?) and stack-based vm
     by nommiin
  */
 
 mGeneric = false;
-mOptimize = true;
+mOptimize = false;
 mBracketType = "";
 mBrackets = [];
 mBytecode = [];
@@ -27,7 +31,7 @@ mTokens = {
     "global": {
         Section: {Start: undefined, End: ";"},
         Process: function(mSection) {
-            var mSections = mSection.split(",");
+            var mSections = mCompiler.Split(mSection);//mSection.split(",");
             for(var i = 0; i < mSections.length; i++) {
                 mSection = mSections[i];
                 mBytecode.push("EXPR", mSection.split("=").splice(1).join("").trim());
@@ -56,8 +60,11 @@ mTokens = {
     "function": {
         Section: {Start: undefined, End: ")"},
         Process: function(mSection) {
-            var mName = mSection.slice(0, mSection.indexOf("(")), mArguments = mSection.slice(mSection.indexOf("(") + 1);
+            var mName = mSection.slice(0, mSection.indexOf("(")), mArguments = mCompiler.Split(mSection.slice(mSection.indexOf("(") + 1));
             mBytecode.push("FUNC", mName);
+            for(var i = 0; i < mArguments.length; i++) {
+                mBytecode.push("LOCL", mArguments[i]);
+            }
             mFunctions.push(mName);
             mBracketType = "func";
         }
@@ -68,90 +75,87 @@ mTokens = {
             mBytecode.push("EXPR", mSection);
             mBytecode.push("RTRN");
         }
+    },
+    "exit": {
+        Section: {Start: undefined, End: ";"},
+        Process: function(mSection) {
+            mBytecode.push("EXIT");
+        }
     }
 };
 
-mEvaluator = {
-    Precedence: function(mToken) {
-        // 0 = left
-        // 1 = right
-        switch (mToken.Value) {
-            case "addpost": case "subpost": 
-                return {Precedence: 2, Associativity: 0};
-            case "addpre": case "subpre": 
-                return {Precedence: 3, Associativity: 1};
-            case "mul": case "div": case "mod":
-                return {Precedence: 5, Associativity: 0};
-            case "add": case "sub":
-                return {Precedence: 6, Associativity: 0};
-        }
-        return -1;
+mBuilder = {
+    Operators: {
+        "add": 1,
+        "sub": 1,
+        "mul": 2,
+        "div": 2
     },
-    Evaluate: function(mTokens) {
-        var mOperators = [], mOutput = [];
+    Build: function(mTokens) {
+        var mOutput = [], mOperators = [];
         for(var mPosition = 0; mPosition < mTokens.length; mPosition++) {
-            if (mTokens[mPosition].Type == "number" || mTokens[mPosition].Type == "variable" || mTokens[mPosition].Type == "string") {
-                mOutput.push(mTokens[mPosition]);
-            } else if (mTokens[mPosition].Type == "function") {
-                mOperators.push(mTokens[mPosition]);
-            } else if (mTokens[mPosition].Type == "operator") {
-                if (mOperators.length > 0) {
-                    while ((mOperators[mOperators.length - 1].Type == "function")
-                    || (mEvaluator.Precedence(mOperators[mOperators.length - 1]).Precedence > mEvaluator.Precedence(mTokens[mPosition]).Precedence)
-                    || (mEvaluator.Precedence(mOperators[mOperators.length - 1]).Precedence == mEvaluator.Precedence(mTokens[mPosition]).Precedence && mEvaluator.Precedence(mOperators[mOperators.length - 1]).Associativity == 0)
-                    || (!(mOperators[mOperators.length - 1].Type == "parenthesis" && mOperators[mOperators.length - 1].Value == "left"))) {
-                        mOutput.push(mOperators.pop());
-                    }
-                    mOperators.push(mTokens[mPosition]);
+            var mToken = mTokens[mPosition];
+            switch (mToken.Type) {
+                case "number": case "function": case "variable": {
+                    mOutput.push(mToken);
+                    break;
                 }
-                mOperators.push(mTokens[mPosition]);
-            } else if (mTokens[mPosition].Type == "parenthesis") {
-                if (mTokens[mPosition].Value == "left") {
-                    mOperators.push(mTokens[mPosition]);
-                } else if (mTokens[mPosition].Value == "right") {
-                    while (!(mOperators[mOperators.length - 1].Type == "parenthesis" && mOperators[mOperators.length - 1].Value == "left")) {
+
+                case "operator": {
+                    while (mOperators.length > 0 && mOperators.peek().Type == "operator" && mBuilder.Operators[mToken.Value] <= mBuilder.Operators[mOperators.peek().Value]) {
                         mOutput.push(mOperators.pop());
                     }
-                    mOperators.pop();
+                    mOperators.push(mToken);
+                    break;
+                }
+
+                case "parenthesis": {
+                    if (mToken.Value == "left") {
+                        mOperators.push(mToken);
+                    } else {
+                        while (mOperators.peek().Type != "parenthesis" && mOperators.peek().Value != "left") {
+                            mOutput.push(mOperators.pop());
+                        }
+                        mOperators.pop();
+                    }
+                    break;
                 }
             }
         }
-
-        while (mOperators.length > 0) {
-            mOutput.push(mOperators.pop());
-        }
-        return mOutput;
+        return mOutput.concat(mOperators.reverse());
     }
 }
 
 mCompiler = {
     Split: function(mValue) {
         if (mValue.trim() == "") {return []};
-        var mSections = [], mEscape = false;
-        for(var mPosition = 0, mBase = 0; mPosition < mValue.length; mPosition++) {
-            switch (mValue[mPosition]) {
-                case "(": case ")": {
-                    mEscape = !mEscape;
-                    break;    
-                }
-
+        var mSections = [], mEscape = 0;
+        for(var i = 0, j = 0; i < mValue.length; i++) {
+            switch (mValue[i]) {
+                case "(": mEscape++; break;
+                case ")": if (mEscape > 0) {mEscape--} break;
                 case "\"": {
-                    if (mValue[mPosition - 1] != "\\") {
-                        mEscape = !mEscape;
+                    i++;
+                    while (mValue[i] != "\"") {
+                        if (mValue[++i] == "\"") {
+                            if (mValue[i - 1] == "\\") {
+                                i++;
+                            }
+                        }
                     }
                     break;
                 }
 
                 case ",": {
-                    if (mEscape == false) {
-                        mSections.push(mValue.slice(mBase, mPosition).trim());
-                        mBase = ++mPosition;
+                    if (mEscape == 0) {
+                        mSections.push(mValue.slice(j, i).trim());
+                        j = ++i;
                     }
                     break;
                 }
             }
         }
-        return mSections.concat(mValue.slice(mBase).trim());
+        return mSections.concat(mValue.slice(j).trim());
     },
     Type: function(mValue) {
         mValue = (typeof mValue == "string") ? mValue.charCodeAt(0) : mValue;
@@ -199,20 +203,48 @@ mCompiler = {
                         mPosition += mFunction.length;
                         while (mInput[mPosition] != "(") {
                             if (++mPosition > mInput.length) {
-                                mCompiler.Error("Could not find function starting token: \"(\"");
+                                mCompiler.Error("Could not find start of function.");
                             }
                         }
+                        var mEscape = 0;
                         while (mInput[mPosition] != ")") {
-                            if (++mPosition > mInput.length) {
-                                mCompiler.Error("Could not find function ending token: \")\"");
+                            switch (mInput[++mPosition]) {
+                                case "(": mEscape++; break;
+                                case ")": {
+                                    if (mEscape > 0) {
+                                        mEscape--;
+                                        mPosition++;
+                                    } else {
+                                        console.log("found end");
+                                    }
+                                    break;
+                                }
+
+                                case "\"": {
+                                    mPosition++;
+                                    while (mInput[mPosition] != "\"") {
+                                        if (mInput[++mPosition] == "\"") {
+                                            if (mInput[mPosition - 1] == "\\") {
+                                                mPosition++;
+                                            }
+                                        } else {
+                                            if (mPosition > mInput.length) {
+                                                mCompiler.Error("Could not find end of string", mPosition);
+                                            }
+                                        }
+                                    }
+                                    break;
+                                }
+
+                                default: {
+                                    if (mPosition > mInput.length) {
+                                        mCompiler.Error("Could not find end of function", mPosition);
+                                    }
+                                    break;
+                                }
                             }
                         }
-
                         mBytecode.push("EXPR", mInput.slice(mBase, ++mPosition));
-
-                        //mBytecode.push("EXPR", [mFunction, 0]);
-
-                        //console.log("function!!", mInput.slice(mBase, mPosition));
                     }
                 }
             }
@@ -285,7 +317,7 @@ mCompiler = {
                         if (mBrackets.length > 0) {
                             switch (mBrackets.pop()) {
                                 case "func": {
-                                    mBytecode.push("FUNC");
+                                    mBytecode.push("FUNC", 0);
                                     break;
                                 }
 
@@ -372,16 +404,13 @@ mCompiler = {
                     break;
                 }
             }
-           // switch (mTokens[i].Type) {
-                //case "function":
-            //}
         }
         return mInstructions;
     },
     Expand: function() {
         for(var mPosition = 0; mPosition < mBytecode.length; mPosition++) {
             if (mBytecode[mPosition] == "EXPR") {
-                mBytecode = (mBytecode.slice(0, mPosition)).concat(mCompiler.Instructionize(mEvaluator.Evaluate(mCompiler.Tokenize(mBytecode[mPosition + 1]))).concat(mBytecode.slice(mPosition + 2)));
+                mBytecode = (mBytecode.slice(0, mPosition)).concat(mCompiler.Instructionize(mBuilder.Build(mCompiler.Tokenize(mBytecode[mPosition + 1]))).concat(mBytecode.slice(mPosition + 2)));
             }
         }
     },
@@ -466,23 +495,48 @@ mCompiler = {
                             switch (mExpression.charCodeAt(mPosition)) {
                                 // Function
                                 case 40: {
-                                    var mFunction =  mExpression.slice(mBase, mPosition).trim(), mBase = mPosition + 1;
-                                    mPosition = mExpression.length;
-                                    while (mExpression.charCodeAt(mPosition) != 41) {
-                                        if (--mPosition < 0) {
-                                            mCompiler.Error("Unable to tokenize expression, could not find end of function call", mPosition);
+                                    var mFunction =  mExpression.slice(mBase, mPosition).trim(), mBase = mPosition + 1, mEscape = 1;
+                                    console.log("Function:", mFunction);
+                                    console.log("Expression:", mExpression.slice(mBase));
+                                    while (mEscape > 0) {
+                                        console.log(`char[${mPosition}] = ${mExpression[mPosition]}`);
+
+                                        switch (mExpression[++mPosition]) {
+                                            case "(": mEscape++; break;
+                                            case ")": mEscape--; break;
+                                            case "\"": {
+                                                mPosition++;
+                                                while (mExpression[mPosition] != '"') {
+                                                    if (mExpression[++mPosition] == '"') {
+                                                        if (mExpression[mPosition - 1] == "\\") {
+                                                            mPosition++;
+                                                        }
+                                                    } else {
+                                                        if (mPosition > mExpression.length) {
+                                                            mCompiler.Error("Could not find end of string");
+                                                        }
+                                                    }
+                                                }
+                                                break;
+                                            }
+
+                                            default: {
+                                                if (mPosition > mExpression.length) {
+                                                    mCompiler.Error("Could not find end of function call");
+                                                }
+                                            }
                                         }
                                     }
-                                    var mArguments = mCompiler.Split(mExpression.slice(mBase, mPosition).trim());
-                                    console.log("ARGUMENTS::", JSON.stringify(mArguments));
+
+                                    var mArguments = mCompiler.Split(mExpression.slice(mBase, mPosition));
                                     for(var i = 0; i < mArguments.length; i++) {
-                                        mArguments[i] = mCompiler.Tokenize(mArguments[i]);
+                                        mArguments[i] = mBuilder.Build(mCompiler.Tokenize(mArguments[i]));
                                     }
-                                    mTokens.push({Type: "function", Value: mFunction, Arguments: mArguments});//mCompiler.Tokenize(mExpression.slice(mBase, mPosition).trim())});
+                                    mTokens.push({Type: "function", Value: mFunction, Arguments: mArguments});
                                     break;
                                 }
 
-                                // Variable
+                                // Global Variable
                                 case 46: {
                                     var mScope = mExpression.slice(mBase, mPosition).trim();
                                     mBase = ++mPosition;
@@ -491,13 +545,13 @@ mCompiler = {
                                             break;
                                         }
                                     }
-                                    mTokens.push({Type: "variable", Value: mExpression.slice(mBase, mPosition--).trim(), Scope: mScope})
+                                    mTokens.push({Type: "variable", Value: mExpression.slice(mBase, mPosition--).trim(), Scope: mScope});
                                     break;
                                 }
 
                                 // Special
                                 default: {
-                                    console.log(`Special: "${mExpression.slice(mPosition)}"`);
+                                    mTokens.push({Type: "variable", Value: mExpression.slice(mBase, mPosition--).trim(), Scope: "local"});
                                     break;
                                 }
                             }
@@ -561,9 +615,29 @@ mCompiler = {
         }
     },
     Print: function() {
+        for(var i = 0; i < mBytecode.length; i++) {
+            var a = mBytecode[i], b = "", c = i;
+            switch (mBytecode[i]) {
+                case "PUSH":
+                case "LOCL":
+                case "GLOB":
+                case "CALL":
+                case "COMP":
+                case "JUMP":
+                case "BTRU":
+                case "BFAL":
+                case "FUNC": {
+                    b = mBytecode[++i];
+                    break;
+                }
+            }
+            console.log(`0x${c.toString(16).padStart(2, "0").toUpperCase()} = ${a}${(b != "" ? `, [${b}]` : "")}`);
+        }
+        /*
         for(var i = 0; i < mBytecode.length; i += 2) {
             console.log(`0x${(i / 2).toString(16).padStart(2, "0")} = ${mBytecode[i]}:[${mBytecode[i + 1]}]`);
         }
+        */
     }
 };
 
@@ -587,10 +661,10 @@ mRuntime = {
         for(var mPosition = 0; mPosition < mBytecode.length; mPosition++) {
             if (mRuntime.Continue == false) break;
             switch (mBytecode[mPosition]) {
-                case "ADD": (mStack.length < 2 ? mRuntime.Error("Unable to complete add operation, expecting at least 2 values in stack", mPosition) : 0); mStack.push(mStack.pop() + mStack.pop()); break;
-                case "SUB": (mStack.length < 2 ? mRuntime.Error("Unable to complete subtract operation, expecting at least 2 values in stack", mPosition) : 0); mStack.push(mStack.pop() - mStack.pop()); break;
-                case "MUL": (mStack.length < 2 ? mRuntime.Error("Unable to complete multiplcation operation, expecting at least 2 values in stack", mPosition) : 0); mStack.push(mStack.pop() * mStack.pop()); break;
-                case "DIV": (mStack.length < 2 ? mRuntime.Error("Unable to complete division operation, expecting at least 2 values in stack", mPosition) : 0); mStack.push(mStack.pop() / mStack.pop()); break;
+                case "ADD": (mStack.length < 2 ? mRuntime.Error("Unable to complete add operation, expecting at least 2 values in stack", mPosition) : 0); var b = mStack.pop(), a = mStack.pop(); mStack.push(a + b); break;
+                case "SUB": (mStack.length < 2 ? mRuntime.Error("Unable to complete subtract operation, expecting at least 2 values in stack", mPosition) : 0); var b = mStack.pop(), a = mStack.pop();  mStack.push(a - b); break;
+                case "MUL": (mStack.length < 2 ? mRuntime.Error("Unable to complete multiplcation operation, expecting at least 2 values in stack", mPosition) : 0); var b = mStack.pop(), a = mStack.pop(); mStack.push(a * b); break;
+                case "DIV": (mStack.length < 2 ? mRuntime.Error("Unable to complete division operation, expecting at least 2 values in stack", mPosition) : 0); var b = mStack.pop(), a = mStack.pop(); mStack.push(a / b); break;
                 case "DUP": (mStack.length < 1 ? mRuntime.Error("Unable to complete duplication operation, expecting at least 1 value in stack", mPosition) : 0); mStack.push(mStack[mStack.length - 1]); break;
                 case "POP": (mStack.length < 1 ? mRuntime.Error("Unable to complete pop operation, expecting at least 1 value in stack", mPosition) : 0); mStack.pop(); break;
                
@@ -649,12 +723,12 @@ mRuntime = {
                 case "COMP": {
                     if (mStack.length >= 2) {
                         switch (mBytecode[++mPosition]) {
-                            case "eq": mStack.push(mStack.pop() == mStack.pop()); break;
-                            case "ne": mStack.push(mStack.pop() != mStack.pop()); break;
-                            case "lt": mStack.push(mStack.pop() < mStack.pop());  break;
-                            case "gt": mStack.push(mStack.pop() > mStack.pop());  break;
-                            case "le": mStack.push(mStack.pop() <= mStack.pop()); break;
-                            case "ge": mStack.push(mStack.pop() >= mStack.pop()); break;
+                            case "==": mStack.push(mStack.pop() == mStack.pop()); break;
+                            case "!=": mStack.push(mStack.pop() != mStack.pop()); break;
+                            case "<": mStack.push(mStack.pop() < mStack.pop());  break;
+                            case ">": mStack.push(mStack.pop() > mStack.pop());  break;
+                            case "<=": mStack.push(mStack.pop() <= mStack.pop()); break;
+                            case ">=": mStack.push(mStack.pop() >= mStack.pop()); break;
                             default: {
                                 mRuntime.Error("Unable to compare, unknown comparision type of \"" + mBytecode[mPosition] + "\"", mPosition)
                                 break;
@@ -694,7 +768,7 @@ mRuntime = {
                             mRuntime.Error("Unable to define function, unable to find end of function", mPosition);
                         }
                     }
-                    mRuntime.Functions[mFunction] = {Type: 1, Route: [mStart, mPosition]};
+                    mRuntime.Functions[mFunction] = {Type: 1, Route: [mStart, mPosition++]};
                     break;
                 }
 
@@ -749,6 +823,8 @@ mDecompiler = {
                     mOutput += `local ${mBytecode[++mPosition]} = ${mStack.pop()};\n`;
                     break;
                 }
+
+
             }
         }
         console.log(mOutput);
@@ -756,11 +832,8 @@ mDecompiler = {
     }
 }
 
-var t = mCompiler.Compile(`
-    local a = 0;
-    if (local.a == 1) {
-        print("local.a is equal to 1");
-    }
+var t = mCompiler.Compile(`'
+    local a = [];
 `);
 
 console.log(JSON.stringify(t))
